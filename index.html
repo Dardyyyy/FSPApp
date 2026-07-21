@@ -781,7 +781,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
       <div class="suche-title">🔍 Schritt-Analyse</div>
       <div class="suche-input-row">
         <input class="suche-nr-input" id="sucheInput" type="text"
-          placeholder="Schritt-Nr. oder Ventil (z.B. V5.5)" autocomplete="off" autocapitalize="characters"
+          placeholder="Schritt-Nr., Ventil (V5.5) oder Sensor (TE1, PT4)" autocomplete="off" autocapitalize="characters"
           oninput="onSucheInput(this.value)">
         <button class="btn-suche-clear" onclick="clearSuche()">✕</button>
       </div>
@@ -804,9 +804,8 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
       <div class="suche-empty">
         <div class="suche-empty-icon">⌬</div>
         <div class="suche-empty-text">
-          Schritt-Nummer eingeben<br>
-          Alle Ventile mit exakter Bezeichnung<br>
-          aus der VSP-Tabelle werden angezeigt
+          Schritt-Nummer, Ventil (V5.5) oder<br>
+          Sensor (TE1, PT4, PR01, QE1) eingeben
         </div>
       </div>
     </div>
@@ -857,7 +856,14 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
     <div class="schema-header">
       <div class="schema-title">◈ R&I-Fließschema</div>
       <div class="schema-sub">Zeichnungs-Nr. R002614-SFM-CIP · Bausch+Ströbel · FSP 54260</div>
+      <div class="suche-input-row" style="margin-top:8px;">
+        <input class="suche-nr-input" id="schemaStepInput" type="text"
+          placeholder="Schritt-Nr. eingeben, um Ventile zu sehen…" inputmode="numeric" autocomplete="off"
+          oninput="onSchemaStepInput(this.value)">
+        <button class="btn-suche-clear" onclick="clearSchemaStep()">✕</button>
+      </div>
     </div>
+    <div id="schemaStepPanel" style="display:none; max-height:34vh; overflow-y:auto; border-bottom:1px solid var(--b1); flex-shrink:0;"></div>
     <div class="schema-viewport" id="schemaViewport">
       <img src="ri.webp" alt="R&I-Fließschema FSP 54260" class="schema-img" id="schemaImg">
     </div>
@@ -1928,7 +1934,7 @@ function clearSuche() {
   document.getElementById('sucheInput').value = '';
   document.getElementById('sucheBody').innerHTML = `<div class="suche-empty">
     <div class="suche-empty-icon">⌬</div>
-    <div class="suche-empty-text">Schritt-Nummer eingeben<br>Alle Ventile mit exakter Bezeichnung<br>aus der VSP-Tabelle werden angezeigt</div>
+    <div class="suche-empty-text">Schritt-Nr., Ventil oder Sensor (TE1/PT4/PR01/QE1) eingeben</div>
   </div>`;
 }
 
@@ -1957,11 +1963,22 @@ function runSuche(raw) {
     return;
   }
 
+  // Sensor code input (TE1, PT4, PR01, QE1, or just "TE"/"PT"/"PR"/"QE") -> sensor search
+  const qUpper = trimmed.toUpperCase();
+  if (/^(TE|PT|PR|QE)\d*$/.test(qUpper)) {
+    const results = searchSensor(qUpper);
+    showSensorResults(qUpper, results);
+    return;
+  }
+
   // Non-numeric input -> valve name/code search
   const q = trimmed.toUpperCase();
   const matches = SYS_VALVES.filter(v => v.toUpperCase().includes(q));
   if (!matches.length) {
-    body.innerHTML = `<div class="suche-not-found">Kein Ventil oder Schritt gefunden für "${trimmed}"</div>`;
+    // Fallback: try sensor search anyway (e.g. partial match within fw labels)
+    const sensorResults = searchSensor(qUpper);
+    if (sensorResults.length) { showSensorResults(qUpper, sensorResults); return; }
+    body.innerHTML = `<div class="suche-not-found">Kein Ventil, Sensor (TE/PT/PR/QE) oder Schritt gefunden für "${trimmed}"</div>`;
     return;
   }
   body.innerHTML = matches.map(name => {
@@ -2002,6 +2019,68 @@ function showValveOccurrences(valveName) {
       <div class="compare-valve-row both" style="cursor:pointer;" onclick="document.getElementById('sucheInput').value='${o.nr}'; runSuche('${o.nr}');">
         <span class="compare-valve-name">Schritt ${o.nr}</span>
         <span class="compare-valve-state">${o.name} · ${o.code}</span>
+      </div>`).join('');
+  }
+  body.innerHTML = html;
+}
+
+function clearSchemaStep() {
+  document.getElementById('schemaStepInput').value = '';
+  document.getElementById('schemaStepPanel').style.display = 'none';
+  document.getElementById('schemaStepPanel').innerHTML = '';
+}
+
+function onSchemaStepInput(val) {
+  const trimmed = (val || '').trim();
+  const panel = document.getElementById('schemaStepPanel');
+  if (!trimmed) { clearSchemaStep(); return; }
+  const nr = parseInt(trimmed);
+  const d = STEP_DB[String(nr)];
+  panel.style.display = 'block';
+  if (!isNaN(nr) && d) {
+    let html = `<div style="padding:10px 14px;">
+      <div style="font-family:var(--mono);font-size:12px;color:var(--acc);font-weight:700;">Schritt ${nr}</div>
+      <div style="font-size:13px;font-weight:600;margin:2px 0 8px;">${d.n}</div>`;
+    html += buildValveHTML(nr);
+    html += `</div>`;
+    panel.innerHTML = html;
+  } else {
+    panel.innerHTML = `<div class="suche-not-found">Schritt ${trimmed} nicht gefunden</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SENSOR-SUCHE (TE/PT/PR/QE) — zeigt in welchen Schritten ein
+// Sensor als Weiterschaltbedingung vorkommt
+// ═══════════════════════════════════════════════════════════
+function searchSensor(q) {
+  const query = q.toUpperCase();
+  const results = [];
+  Object.entries(STEP_DB).forEach(([nr, d]) => {
+    if (!d.fw) return;
+    Object.entries(d.fw).forEach(([label, val]) => {
+      if (label.toUpperCase().includes(query)) {
+        results.push({nr: parseInt(nr), name: d.n, label, val});
+      }
+    });
+  });
+  return results.sort((a,b) => a.nr - b.nr);
+}
+
+function showSensorResults(query, results) {
+  const body = document.getElementById('sucheBody');
+  let html = `<div class="result-header">
+      <div class="result-nr">🌡 / 📊 Sensor-Suche: "${query}"</div>
+      <div class="result-name">${results.length} Treffer in Weiterschaltbedingungen</div>
+    </div>`;
+  if (!results.length) {
+    html += `<div class="suche-empty-text">Kein Sensor "${query}" gefunden. Beispiele: TE1, PT4, PR01, QE1</div>`;
+  } else {
+    html += `<div class="suche-section-title" style="font-family:var(--mono);font-size:11px;color:var(--t3);margin:10px 0 6px;">Vorkommen:</div>`;
+    html += results.map(r => `
+      <div class="compare-valve-row both" style="cursor:pointer;" onclick="document.getElementById('sucheInput').value='${r.nr}'; runSuche('${r.nr}');">
+        <span class="compare-valve-name">Schritt ${r.nr} · ${r.name}</span>
+        <span class="compare-valve-state">${r.label} = ${r.val}</span>
       </div>`).join('');
   }
   body.innerHTML = html;
