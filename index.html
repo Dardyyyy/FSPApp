@@ -2942,35 +2942,56 @@ function closeProtokoll() { var el = document.getElementById("protokollSheet"); 
 // ═══════════════════════════════════════════════════════════
 // HANDBUCH — kategorisierte Bedienungsanleitung
 // ═══════════════════════════════════════════════════════════
+const HANDBUCH_META = {
+  sicherheit:   { color:'#ff4444', bg:'rgba(255,68,68,.12)',  sub:'Personal, Gefahren, Schutzausrüstung' },
+  anlage:       { color:'#00c8f0', bg:'rgba(0,200,240,.12)',  sub:'Aufbau, Manipulationseinheit, Lüftung' },
+  zugang:       { color:'#ffd740', bg:'rgba(255,215,64,.12)', sub:'Benutzergruppen, Passwortverwaltung' },
+  betriebsarten:{ color:'#00e676', bg:'rgba(0,230,118,.12)',  sub:'Dekontamination, VHP-Zyklus, Belüften' },
+  wartung:      { color:'#ff9800', bg:'rgba(255,152,0,.12)',  sub:'Filter, Handschuhe, Dichtungen, Ersatzteile' },
+  service:      { color:'#a78bfa', bg:'rgba(167,139,250,.12)',sub:'Dokument-Info, Hersteller-Referenzen' },
+};
+
 function renderHandbuchCategories() {
   document.getElementById('hbTitle').textContent = '📖 Handbuch';
   document.getElementById('hbSearch').value = '';
   document.getElementById('hbSearch').placeholder = 'Fehlersuche: Code, Klappe, Filter…';
   const body = document.getElementById('hbBody');
   const cats = Object.keys(HANDBUCH);
-  let html = cats.map(key => {
+  let html = `<div style="display:flex;flex-direction:column;gap:10px;">`;
+  html += cats.map(key => {
     const c = HANDBUCH[key];
-    return `<div class="result-header" style="cursor:pointer;margin-bottom:8px;" onclick="renderHandbuchCategory('${key}')">
-      <div class="result-nr">${c.icon} ${c.title}</div>
-      <div class="result-name">${c.sections.length} Abschnitt(e)</div>
+    const m = HANDBUCH_META[key] || { color:'var(--accent)', bg:'var(--accent-dim)', sub:'' };
+    return `<div onclick="renderHandbuchCategory('${key}')" style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;cursor:pointer;transition:transform .15s;">
+      <div style="width:46px;height:46px;flex-shrink:0;border-radius:13px;background:${m.bg};display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:inset 0 0 0 1px ${m.color}33;">${c.icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);">${c.title}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.sub}</div>
+      </div>
+      <div style="font-size:10px;color:${m.color};font-weight:700;background:${m.bg};padding:3px 8px;border-radius:10px;white-space:nowrap;">${c.sections.length}</div>
+      <div style="color:var(--t3);font-size:16px;">›</div>
     </div>`;
   }).join('');
-  html += `<div class="result-header" style="cursor:pointer;margin-top:4px;border-color:var(--yellow);" onclick="switchTab('handbuch'); document.getElementById('hbSearch').focus();">
-      <div class="result-nr" style="color:var(--yellow)">🚨 Fehlersuche</div>
-      <div class="result-name">Alarm-Code, Klappe, Filter oder Stichwort oben eingeben (${ALARM_DB.length} Alarm-Gruppen, alle Codes durchsuchbar)</div>
+  html += `</div>`;
+  html += `<div onclick="switchTab('handbuch'); document.getElementById('hbSearch').focus();" style="display:flex;align-items:center;gap:14px;padding:14px 16px;margin-top:14px;background:linear-gradient(135deg,rgba(255,215,64,.14),rgba(255,152,0,.08));border:1px solid rgba(255,215,64,.4);border-radius:14px;cursor:pointer;">
+      <div style="width:46px;height:46px;flex-shrink:0;border-radius:13px;background:rgba(255,215,64,.18);display:flex;align-items:center;justify-content:center;font-size:22px;">🚨</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:700;color:var(--yellow);">Fehlersuche</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:2px;line-height:1.4;">Alarm-Code, Klappe, Filter oder Stichwort oben eingeben — ${ALARM_DB.length} Alarm-Gruppen, alle Codes durchsuchbar</div>
+      </div>
     </div>`;
   body.innerHTML = html;
 }
 
 function renderHandbuchCategory(key) {
   const c = HANDBUCH[key];
+  const m = HANDBUCH_META[key] || { color:'var(--accent)', bg:'var(--accent-dim)' };
   document.getElementById('hbTitle').textContent = `${c.icon} ${c.title}`;
   const body = document.getElementById('hbBody');
-  let html = `<button class="btn-suche-clear" style="margin-bottom:10px;" onclick="renderHandbuchCategories()">← Zurück zur Übersicht</button>`;
-  html += c.sections.map(s => `
-    <div class="uebergabe-section">
-      <div class="uebergabe-section-title"><span>${s.t}</span></div>
-      <div style="font-size:12px;line-height:1.6;color:var(--text);">${s.html}</div>
+  let html = `<button onclick="renderHandbuchCategories()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;margin-bottom:14px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t2);font-size:12px;font-weight:600;">‹ Übersicht</button>`;
+  html += c.sections.map((s, i) => `
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:14px 16px;margin-bottom:10px;border-left:3px solid ${m.color};">
+      <div style="font-size:13px;font-weight:700;color:${m.color};margin-bottom:8px;">${s.t}</div>
+      <div style="font-size:12px;line-height:1.65;color:var(--text);">${s.html}</div>
     </div>`).join('');
   body.innerHTML = html;
 }
@@ -2986,19 +3007,26 @@ function hbSearchAlarms(raw) {
     a.codes.some(c => c.toUpperCase().includes(q))
   );
   if (!matches.length) {
-    body.innerHTML = `<div class="suche-not-found">Keine Alarm-Gruppe gefunden für "${raw}"</div>`;
+    body.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--t3);">
+      <div style="font-size:32px;margin-bottom:10px;">🔍</div>
+      <div style="font-size:13px;">Keine Alarm-Gruppe gefunden für "${raw}"</div>
+    </div>`;
     return;
   }
-  body.innerHTML = matches.map(a => `
-    <div class="uebergabe-section">
-      <div class="uebergabe-section-title"><span>⚠️ ${a.g}</span></div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--yellow);margin-bottom:6px;">${a.codes.join(' · ')}</div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:8px;">${a.namen}</div>
-      <div style="font-size:12px;margin-bottom:8px;"><b>Beschreibung:</b> ${a.b}</div>
-      <div style="font-size:12px;margin-bottom:6px;"><b>Mögliche Gründe:</b></div>
-      <ul style="margin:0 0 8px 18px;padding:0;font-size:12px;">${a.gr.map(x=>`<li>${x}</li>`).join('')}</ul>
-      <div style="font-size:12px;margin-bottom:6px;color:var(--green);"><b>Behebung:</b></div>
-      <ul style="margin:0 0 0 18px;padding:0;font-size:12px;color:var(--green);">${a.be.map(x=>`<li>${x}</li>`).join('')}</ul>
+  body.innerHTML = `<div style="font-size:11px;color:var(--t3);margin-bottom:10px;">${matches.length} Treffer</div>` + matches.map(a => `
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:14px 16px;margin-bottom:10px;border-left:3px solid var(--yellow);">
+      <div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:6px;">⚠️ ${a.g}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">${a.codes.map(c=>`<span style="font-family:var(--mono);font-size:9px;color:var(--yellow);background:rgba(255,215,64,.12);padding:2px 6px;border-radius:6px;">${c}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:10px;">${a.namen}</div>
+      <div style="font-size:12px;margin-bottom:10px;color:var(--text);">${a.b}</div>
+      <div style="background:var(--s3);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Mögliche Gründe</div>
+        <ul style="margin:0;padding:0 0 0 16px;font-size:12px;color:var(--text);line-height:1.6;">${a.gr.map(x=>`<li>${x}</li>`).join('')}</ul>
+      </div>
+      <div style="background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);border-radius:10px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">✓ Behebung</div>
+        <ul style="margin:0;padding:0 0 0 16px;font-size:12px;color:var(--green);line-height:1.6;">${a.be.map(x=>`<li>${x}</li>`).join('')}</ul>
+      </div>
     </div>`).join('');
 }
 
