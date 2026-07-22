@@ -2460,6 +2460,16 @@ function buildStepDiff(stepNr) {
   return html;
 }
 
+let schemaPanelCollapsed = true; // Standard: eingeklappt, damit das Bild mehr Platz hat (Positionen sind ja jetzt live im Bild sichtbar)
+
+function toggleSchemaPanel() {
+  schemaPanelCollapsed = !schemaPanelCollapsed;
+  const details = document.getElementById('schemaPanelDetails');
+  const toggleBtn = document.getElementById('schemaPanelToggle');
+  if (details) details.style.display = schemaPanelCollapsed ? 'none' : 'block';
+  if (toggleBtn) toggleBtn.textContent = schemaPanelCollapsed ? '▾ Details anzeigen' : '▴ Details ausblenden';
+}
+
 function onSchemaStepInput(val) {
   const trimmed = (val || '').trim();
   const panel = document.getElementById('schemaStepPanel');
@@ -2468,7 +2478,7 @@ function onSchemaStepInput(val) {
   const d = STEP_DB[String(nr)];
   panel.style.display = 'block';
   if (!isNaN(nr) && d) {
-    let html = `<div style="padding:10px 14px 0;">
+    let html = `<div style="padding:8px 14px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <button onclick="schemaStepNav(-1)" style="background:var(--b2);border:1px solid var(--b1);border-radius:6px;color:var(--text);padding:4px 10px;font-family:var(--mono);font-size:13px;">◀</button>
         <div style="flex:1;">
@@ -2476,20 +2486,23 @@ function onSchemaStepInput(val) {
           <div style="font-size:13px;font-weight:600;">${d.n}</div>
         </div>
         <button onclick="schemaStepNav(1)" style="background:var(--b2);border:1px solid var(--b1);border-radius:6px;color:var(--text);padding:4px 10px;font-family:var(--mono);font-size:13px;">▶</button>
+        <button id="schemaPanelToggle" onclick="toggleSchemaPanel()" style="background:var(--s3);border:1px solid var(--b1);border-radius:6px;color:var(--t2);padding:4px 8px;font-size:10px;white-space:nowrap;">${schemaPanelCollapsed ? '▾ Details anzeigen' : '▴ Details ausblenden'}</button>
       </div>
-      <div style="font-size:9px;color:var(--t3);font-family:var(--mono);margin-top:6px;">🟢 = offen in diesem Schritt · grau = geschlossen · gruppiert nach Anlagenbereich</div>
-    </div>`;
+    </div>
+    <div id="schemaPanelDetails" style="display:${schemaPanelCollapsed ? 'none' : 'block'};">
+      <div style="padding:0 14px 6px;font-size:9px;color:var(--t3);font-family:var(--mono);">🟢 = offen in diesem Schritt · grau = geschlossen · gruppiert nach Anlagenbereich</div>`;
     html += buildStepDiff(nr);
     html += buildValveGrid(nr);
     html += `<div style="padding:0 14px 10px;">`;
     html += buildValveHTML(nr);
-    html += `</div>`;
+    html += `</div></div>`;
     panel.innerHTML = html;
   } else {
     panel.innerHTML = `<div class="suche-not-found">Schritt ${trimmed} nicht gefunden</div>`;
   }
   renderSchemaDots();
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // SENSOR-SUCHE (TE/PT/PR/QE) — zeigt in welchen Schritten ein
