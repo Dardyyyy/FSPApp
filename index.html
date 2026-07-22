@@ -1181,26 +1181,6 @@ const HANDBUCH = {
         </table>` },
     ]
   },
-  service: {
-    icon: '📞', title: 'Service & Dokument',
-    sections: [
-      { t: 'Dokument-Info', html: `<p><b>Bedienungsanleitung</b> — Isolator für Spritzenfüllmaschine 10/308-200, Abfülllinie Modul FSP<br>
-        Anlagen-Nr.: 1002, 235.F01.41.400, Projekt I.00173<br>
-        Dok. Kennung: 15224.FSP.Betriebsanleitung.1.0 / F01.41.400 · Version 1.0, 30. April 2009<br>
-        ELVIS Ident-Nr.: 3629962/01 · Migration Werkdoku 29.09.2015<br>
-        Kunde: Parenteralia Produktion NPK, CH-Kaiseraugst</p>` },
-      { t: 'Hersteller-Referenzen', html: `<ul>
-        <li><b>Isolator/Mechanik:</b> Metall + Plastic</li>
-        <li><b>VHP-Dekontamination:</b> STERIS (VHP® M1000-S) — separate Bedienungsanleitung Band 4.2</li>
-        <li><b>Entfeuchter:</b> MUNTERS (ML 690 / ML 180)</li>
-        <li><b>Frequenzumrichter:</b> DANFOSS</li>
-        <li><b>H2O2-Sensoren:</b> Draeger (Polytron 7000)</li>
-        <li><b>Feuchte/Temp-Messtechnik:</b> Vaisala</li>
-        <li><b>Füllmaschine:</b> Bausch + Ströbel</li>
-      </ul>
-      <p style="color:var(--t3);font-size:11px;margin-top:8px;">Für Details zu VHP-Generator, Entfeuchter und Frequenzumrichtern: siehe jeweilige Herstellerdokumentation in Anlagendokumentation Band 4.</p>` },
-    ]
-  }
 };
 
 function getClosedValves(stepNr) {
@@ -2948,7 +2928,6 @@ const HANDBUCH_META = {
   zugang:       { color:'#ffd740', bg:'rgba(255,215,64,.12)', sub:'Benutzergruppen, Passwortverwaltung' },
   betriebsarten:{ color:'#00e676', bg:'rgba(0,230,118,.12)',  sub:'Dekontamination, VHP-Zyklus, Belüften' },
   wartung:      { color:'#ff9800', bg:'rgba(255,152,0,.12)',  sub:'Filter, Handschuhe, Dichtungen, Ersatzteile' },
-  service:      { color:'#a78bfa', bg:'rgba(167,139,250,.12)',sub:'Dokument-Info, Hersteller-Referenzen' },
 };
 
 function renderHandbuchCategories() {
