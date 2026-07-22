@@ -2864,11 +2864,12 @@ function exportUebergabe() {
 // ═══════════════════════════════════════════════════════════
 function exportDataFile() {
   const payload = {
-    app: 'FSP-54260', version: 1,
+    app: 'FSP-54260', version: 2,
     exportedAt: new Date().toISOString(),
     exportedBy: user ? user.name : '?',
     stepStates, logEntries, progStartTimes,
-    uebergabeNote: localStorage.getItem('fsp_uebergabe_note') || ''
+    uebergabeNote: localStorage.getItem('fsp_uebergabe_note') || '',
+    valvePositions, teamNotes
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -2892,7 +2893,9 @@ function importDataFile(event) {
       const data = JSON.parse(reader.result);
       const nSteps = data.stepStates ? Object.keys(data.stepStates).length : 0;
       const nLogs = data.logEntries ? data.logEntries.length : 0;
-      const ok = confirm(`Import von: ${data.exportedBy||'?'}\nDatum: ${data.exportedAt?new Date(data.exportedAt).toLocaleString('de-DE'):'?'}\n\n${nSteps} Schritt-Status, ${nLogs} Log-Einträge\n\nJetzt mit lokalen Daten zusammenführen?`);
+      const nValvePos = data.valvePositions ? Object.keys(data.valvePositions).length : 0;
+      const nTeamNotes = data.teamNotes ? Object.keys(data.teamNotes).length : 0;
+      const ok = confirm(`Import von: ${data.exportedBy||'?'}\nDatum: ${data.exportedAt?new Date(data.exportedAt).toLocaleString('de-DE'):'?'}\n\n${nSteps} Schritt-Status, ${nLogs} Log-Einträge${nValvePos?`, ${nValvePos} Ventil-Positionen`:''}${nTeamNotes?`, ${nTeamNotes} Team-Notizen`:''}\n\nJetzt mit lokalen Daten zusammenführen?`);
       if (!ok) return;
       stepStates = Object.assign({}, stepStates, data.stepStates||{});
       if (Array.isArray(data.logEntries)) {
@@ -2903,6 +2906,8 @@ function importDataFile(event) {
       }
       progStartTimes = Object.assign({}, progStartTimes, data.progStartTimes||{});
       if (data.uebergabeNote) { try { localStorage.setItem('fsp_uebergabe_note', data.uebergabeNote); } catch(e){} }
+      if (data.valvePositions) { valvePositions = Object.assign({}, valvePositions, data.valvePositions); saveValvePositions(); updateCalibCount(); renderSchemaDots(); }
+      if (data.teamNotes) { teamNotes = Object.assign({}, teamNotes, data.teamNotes); try { localStorage.setItem('fsp54260_teamnotes', JSON.stringify(teamNotes)); } catch(e){} }
       saveState();
       renderSteps(); renderProgs(); renderLog(); renderUebergabe();
       addLog('info', `Daten importiert von ${data.exportedBy||'?'}`);
@@ -3557,13 +3562,18 @@ XP: Taktfolge 26 (Ventile werden nacheinander in Folge 26 geöffnet/geschlossen)
 Filter-Alarme (Differenzdruck F01-F23), Klappen-Alarme, Ventil-Alarme, Tür-Alarme, Druck Türdichtungen, Über-/Unterdruck, Temperatur/Feuchte, H2O2-Konzentration, Stromversorgung/Sicherungen, Motorschutzschalter, VHP-Generator/Kommunikation, Dekontamination abgebrochen, Dichtheitstest, Sicherheitssteuerung, Drahtbruch Sensoren.
 
 ═══ DEINE AUFGABEN ═══
-1. SCHRITTANALYSE: Erkläre was in einem Schritt passiert — welche Ventile offen sind, welche Weiterschaltbedingungen (Druck/Temp/Zeit) erfüllt sein müssen
-2. VENTILINFO: Erkläre welches Ventil was macht und wo es sitzt
-3. FEHLERBEHEBUNG: Nutze dein Wissen über die Alarmkategorien für konkrete Diagnosetipps
-4. PROGRAMMFÜHRUNG: Erkläre CIP/SIP-Phasen und deren Reihenfolge
-5. HANDBUCH: Verweise bei Sicherheits-/Wartungsfragen auf den Handbuch-Tab der App
+1. SCHRITTANALYSE: Erkläre was in einem Schritt passiert — welche Ventile offen sind, welche Weiterschaltbedingungen (Druck/Temp/Zeit) erfüllt sein müssen. Nutzt der Nutzer eine Schritt-Nummer in seiner Frage (auch ohne dass der Schritt gerade in der App offen ist), findest du dessen Daten im Kontext unter "IN DER FRAGE ERWÄHNTER SCHRITT".
+2. VENTILINFO: Erkläre welches Ventil was macht, wo es sitzt und in welchen Schritten es vorkommt — dafür wird bei Ventilnamen in der Frage automatisch ein Block "VENTIL X" mit Verwendungsübersicht mitgeliefert.
+3. FEHLERBEHEBUNG (TROUBLESHOOTING) — das ist eine deiner wichtigsten Aufgaben, geh dabei strukturiert vor:
+   a) Wenn die Frage einen Alarm-Code, ein Bauteil (Filter/Klappe/Ventil/Türe) oder ein Symptom nennt, prüfe zuerst den mitgelieferten Kontext-Block "PASSENDE ALARM-GRUPPE" — er enthält Beschreibung, mögliche Gründe UND konkrete Behebungsschritte aus dem echten Handbuch. Gib diese Schritte konkret wieder, nicht nur zusammenfassen.
+   b) Falls kein Alarm-Kontext mitgeliefert wurde, aber die Frage sich auf ein Problem in einem bestimmten Schritt bezieht, schau in dessen Weiterschaltbedingung/Sollwerte — oft liegt die Ursache darin, dass ein dort genannter Schwellwert nicht erreicht wird (z.B. Druck/Temperatur zu niedrig).
+   c) Nenne immer 2-4 konkrete, geordnete Prüfschritte (nicht nur "prüfen ob alles ok ist") — was der Techniker als nächstes tun soll.
+   d) Falls der Kontext-Block "AKTUELL GEMELDETE PROBLEME" gemeldete Probleme zeigt, beziehe dich darauf wenn relevant.
+   e) Stell bei zu vager Fehlerbeschreibung höchstens EINE gezielte Rückfrage (z.B. "Welcher Alarm-Code wird angezeigt?" oder "Bei welchem Schritt tritt es auf?"), rate nicht blind.
+4. PROGRAMMFÜHRUNG: Nutze die "PROGRAMMÜBERSICHT" im Kontext, um zu erklären wo ein Schritt einzuordnen ist und was vorher/nachher passiert.
+5. HANDBUCH: Verweise bei Sicherheits-/Wartungsfragen zusätzlich auf den Handbuch-Tab der App, wenn dort mehr Detail zu finden wäre als im Kontext mitgeliefert.
 
-Antworte immer auf Deutsch, knapp und praxisnah — du bist der Maschinenexperte an der Anlage, kein theoretisches Gelaber. Wenn du dir bei etwas nicht sicher bist, sag es ehrlich — besser eine ehrliche Unsicherheit als eine falsche Diagnose an einer Pharma-Anlage.`;
+Antworte immer auf Deutsch, knapp und praxisnah — du bist der Maschinenexperte an der Anlage, kein theoretisches Gelaber. Nutze IMMER zuerst die im Kontext mitgelieferten echten Daten (Schritte, Ventile, Alarme, Probleme) bevor du auf allgemeines Wissen zurückgreifst — wenn der Kontext etwas nicht enthält, sag ehrlich, dass du dazu keine hinterlegten Daten hast, statt zu raten. Besser eine ehrliche Unsicherheit als eine falsche Diagnose an einer Pharma-Anlage.`;
 
 let KI_MSGS = [];
 let KI_LOADING = false;
@@ -3596,44 +3606,79 @@ async function kiSend() {
   msgs.appendChild(typ);
   msgs.scrollTop = msgs.scrollHeight;
 
-  // Aktuellen Kontext (gewähltes Programm/Schritt) mitgeben, falls vorhanden
+  // ═══ Kontext dynamisch aus der Frage selbst aufbauen — nicht nur aktueller Schritt ═══
   let ctx = '';
   try {
-    if (typeof _detailNr !== 'undefined' && _detailNr) {
-      const d = STEP_DB[String(_detailNr)];
-      if (d) {
-        ctx += `\nAktuell geöffneter Schritt: ${_detailNr} - ${d.n} (${d.b||''})\n`;
-        if (d.km) {
-          ctx += `Weiterschaltbedingung (Kommentar aus Original-VSP): ${d.km}\n`;
-        }
-        if (d.kmp) {
-          ctx += `Max-Druck-Hinweis: ${d.kmp}\n`;
-        }
-        if (d.kms) {
-          ctx += `Signalaustausch-Hinweis: ${d.kms}\n`;
-        }
-        if (d.kmref) {
-          ctx += `Abgeleiteter Hinweis (unbestätigt, aus Prozessreihenfolge): ${d.kmref}\n`;
-        }
-        const tn = teamNotes[String(_detailNr)];
-        if (tn && tn.text) {
-          ctx += `Team-Notiz (manuell vom Team eingetragen, nicht aus Excel): ${tn.text}\n`;
-        } else if (DEFAULT_TEAM_NOTES[String(_detailNr)]) {
-          ctx += `Team-Notiz-Vorschlag (noch unbestätigt): ${DEFAULT_TEAM_NOTES[String(_detailNr)]}\n`;
-        }
-        if (d.fw && Object.keys(d.fw).length) {
-          ctx += `Sollwerte (fw): ${Object.entries(d.fw).map(([k,v])=>`${k}=${v}`).join(', ')}\n`;
-        }
-        if (d.o && d.o.length) {
-          ctx += `Offene/getaktete Ventile: ${d.o.map(([v,c])=>`${v}=${c}`).join(', ')}\n`;
-        }
-      }
+    // 0) Kompakte Programmübersicht — immer dabei, damit der Bot Struktur kennt
+    ctx += `\n═══ PROGRAMMÜBERSICHT (${PROGRAMS.length} Programme) ═══\n`;
+    ctx += PROGRAMS.map(p => `${p.name}: Schritte ${p.steps[0].nr}–${p.steps[p.steps.length-1].nr} (${p.steps.length} Schritte)`).join('\n') + '\n';
+
+    // 1) Aktuell geöffneter Schritt (falls Nutzer gerade eine Detailansicht offen hat)
+    if (typeof _detailNr !== 'undefined' && _detailNr && STEP_DB[String(_detailNr)]) {
+      ctx += `\n═══ AKTUELL GEÖFFNETER SCHRITT ═══\n` + formatStepForKi(_detailNr);
     }
     if (typeof currentProg !== 'undefined' && currentProg) {
-      const p = PROGRAMS.find(pp=>pp.id===currentProg);
+      const p = PROGRAMS.find(pp => pp.id === currentProg);
       if (p) ctx += `\nAktuell gewähltes Programm: ${p.name}\n`;
     }
-  } catch(e) {}
+
+    // 2) Schritt-Nummern, die der Nutzer in seiner Frage direkt erwähnt (egal ob gerade offen oder nicht)
+    const mentionedNrs = [...new Set((q.match(/\b\d{1,5}\b/g) || []).filter(n => STEP_DB[n] && n !== String(_detailNr)))].slice(0, 5);
+    mentionedNrs.forEach(nr => {
+      ctx += `\n═══ IN DER FRAGE ERWÄHNTER SCHRITT ${nr} ═══\n` + formatStepForKi(nr);
+    });
+
+    // 3) Ventilnamen, die erwähnt werden — Info + in welchen Schritten sie eine Rolle spielen
+    const mentionedValves = [...new Set((q.match(/\b(?:V\d{1,2}\.\d{1,2}|SV\d{1,2}|UEV\d{1,2})\b/gi) || []).map(v => v.toUpperCase()))].slice(0, 5);
+    mentionedValves.forEach(vname => {
+      const match = SYS_VALVES.find(v => v.toUpperCase() === vname);
+      if (match) {
+        const info = VALVE_INFO[match] || {};
+        ctx += `\n═══ VENTIL ${match} ═══\nGruppe: ${info.g || '?'} · Beschreibung: ${info.d || 'keine hinterlegt'}\n`;
+        const usedIn = Object.entries(STEP_DB).filter(([nr, d]) => d.o.some(([n]) => n === match)).slice(0, 8);
+        if (usedIn.length) {
+          ctx += `Kommt vor in Schritten: ` + usedIn.map(([nr, d]) => `${nr} (${d.o.find(([n])=>n===match)[1]})`).join(', ') + '\n';
+        }
+      }
+    });
+
+    // 4) Alarm-/Fehlersuche-Stichworte oder Codes in der Frage — passende Handbuch-Alarmgruppen mitgeben
+    const qUpper = q.toUpperCase();
+    const alarmMatches = ALARM_DB.filter(a =>
+      a.codes.some(c => qUpper.includes(c.toUpperCase())) ||
+      a.g.split(/\W+/).some(word => word.length > 3 && qUpper.includes(word.toUpperCase()))
+    ).slice(0, 3);
+    alarmMatches.forEach(a => {
+      ctx += `\n═══ PASSENDE ALARM-GRUPPE (aus Handbuch) ═══\n${a.g}\nCodes: ${a.codes.join(', ')}\nBeschreibung: ${a.b}\nMögliche Gründe: ${a.gr.join('; ')}\nBehebung: ${a.be.join('; ')}\n`;
+    });
+
+    // 5) Aktuell gemeldete Probleme (aus Übergabe/Log)
+    const probs = Object.entries(stepStates).filter(([k,v]) => v.status === 'problem');
+    if (probs.length) {
+      ctx += `\n═══ AKTUELL GEMELDETE PROBLEME ═══\n` + probs.slice(0,10).map(([key, sd]) => {
+        const nr = key.split('_').pop();
+        const d = STEP_DB[nr];
+        return `Schritt ${nr}${d ? ' ('+d.n+')' : ''}${sd.comment ? ' → ' + sd.comment : ''}`;
+      }).join('\n') + '\n';
+    }
+  } catch(e) { console.warn('KI-Kontext-Fehler', e); }
+
+  function formatStepForKi(nr) {
+    const d = STEP_DB[String(nr)];
+    if (!d) return '';
+    let s = `Name: ${d.n} (${d.b || ''})\n`;
+    if (d.km) s += `Weiterschaltbedingung (Original-Kommentar): ${d.km}\n`;
+    if (d.kmp) s += `Max-Druck-Hinweis: ${d.kmp}\n`;
+    if (d.kms) s += `Signalaustausch: ${d.kms}\n`;
+    if (d.kmref) s += `Abgeleiteter Hinweis (unbestätigt): ${d.kmref}\n`;
+    const tn = teamNotes[String(nr)];
+    if (tn && tn.text) s += `Team-Notiz: ${tn.text}\n`;
+    else if (DEFAULT_TEAM_NOTES[String(nr)]) s += `Team-Notiz-Vorschlag (unbestätigt): ${DEFAULT_TEAM_NOTES[String(nr)]}\n`;
+    if (d.fw && Object.keys(d.fw).length) s += `Sollwerte: ${Object.entries(d.fw).map(([k,v])=>`${k}=${v}`).join(', ')}\n`;
+    if (d.o && d.o.length) s += `Ventile (${d.o.length}): ${d.o.map(([v,c])=>`${v}=${c}`).join(', ')}\n`;
+    return s;
+  }
+
 
   try {
     const resp = await fetch('/api/chat', {
