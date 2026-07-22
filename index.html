@@ -865,10 +865,18 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
           oninput="onSchemaStepInput(this.value)">
         <button class="btn-suche-clear" onclick="clearSchemaStep()">✕</button>
       </div>
+      <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+        <button id="calibBtn" onclick="toggleCalibMode()" style="flex:1;padding:6px 10px;background:var(--b2);border:1px solid var(--b1);border-radius:6px;color:var(--text);font-size:11px;font-family:var(--mono);">📍 Ventil-Position markieren</button>
+        <span id="calibCount" style="font-size:10px;color:var(--t3);font-family:var(--mono);white-space:nowrap;"></span>
+      </div>
+      <div id="calibHint" style="display:none;font-size:10px;color:var(--yellow);padding-top:4px;">Modus aktiv: Tippe im Bild auf ein Ventil-Symbol, dann Namen eingeben. Nochmal Button tippen zum Beenden.</div>
     </div>
     <div id="schemaStepPanel" style="display:none; max-height:46vh; overflow-y:auto; border-bottom:1px solid var(--b1); flex-shrink:0;"></div>
-    <div class="schema-viewport" id="schemaViewport">
-      <img src="ri.webp" alt="R&I-Fließschema FSP 54260" class="schema-img" id="schemaImg">
+    <div class="schema-viewport" id="schemaViewport" onclick="onSchemaImageClick(event)">
+      <div id="schemaOverlayWrap" style="position:relative;display:inline-block;">
+        <img src="ri.webp" alt="R&I-Fließschema FSP 54260" class="schema-img" id="schemaImg">
+        <div id="schemaDots" style="position:absolute;inset:0;pointer-events:none;"></div>
+      </div>
     </div>
     <div class="schema-hint">Zum Zoomen pinchen / mit zwei Fingern scrollen</div>
   </div>
@@ -1739,6 +1747,8 @@ let progStartTimes = {};
 let sheetCallback = null;
 let detailStepKey = null;
 let teamNotes = {}; // key: Schritt-Nr (String) -> Freitext-Notiz vom Team, unabhängig von Programm/Status
+let valvePositions = {}; // key: Ventilname -> {x: %, y: %} — vom Nutzer selbst im Schema kalibriert
+let calibMode = false;
 const DEFAULT_TEAM_NOTES = {
   '4080': 'Team-Erfahrung: Temperatur muss innerhalb der 20-Minuten-Frist für insgesamt 5 Minuten bei 23°C ±1°C liegen (nicht zwingend ununterbrochen die ganzen 20 Min. — die 5 Min. müssen innerhalb des 20-Min.-Fensters erreicht werden). Nicht in VSP-Rohdaten enthalten, sondern Teamwissen.',
   '11080': 'Team-Erfahrung: Temperatur muss innerhalb der 20-Minuten-Frist für insgesamt 5 Minuten bei 23°C ±1°C liegen (nicht zwingend ununterbrochen die ganzen 20 Min. — die 5 Min. müssen innerhalb des 20-Min.-Fensters erreicht werden). Nicht in VSP-Rohdaten enthalten, sondern Teamwissen.',
@@ -1753,7 +1763,63 @@ function loadState() {
     const tn = localStorage.getItem('fsp54260_teamnotes');
     if (tn) teamNotes = JSON.parse(tn);
   } catch(e){}
+  try {
+    const vp = localStorage.getItem('fsp54260_valvepos');
+    if (vp) valvePositions = JSON.parse(vp);
+  } catch(e){}
 }
+function saveValvePositions() {
+  try { localStorage.setItem('fsp54260_valvepos', JSON.stringify(valvePositions)); } catch(e){}
+}
+function toggleCalibMode() {
+  calibMode = !calibMode;
+  document.getElementById('calibBtn').style.background = calibMode ? 'var(--accent)' : 'var(--b2)';
+  document.getElementById('calibBtn').style.color = calibMode ? '#04222c' : 'var(--text)';
+  document.getElementById('calibHint').style.display = calibMode ? 'block' : 'none';
+  updateCalibCount();
+}
+function updateCalibCount() {
+  const el = document.getElementById('calibCount');
+  if (el) el.textContent = `${Object.keys(valvePositions).length} / ${SYS_VALVES.length} markiert`;
+}
+function onSchemaImageClick(evt) {
+  if (!calibMode) return;
+  const img = document.getElementById('schemaImg');
+  const rect = img.getBoundingClientRect();
+  const xPct = ((evt.clientX - rect.left) / rect.width) * 100;
+  const yPct = ((evt.clientY - rect.top) / rect.height) * 100;
+  if (xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
+  const name = prompt('Welches Ventil ist das? (genaue Bezeichnung, z.B. V3.5)');
+  if (!name) return;
+  const trimmed = name.trim();
+  if (!SYS_VALVES.includes(trimmed)) {
+    if (!confirm(`"${trimmed}" ist nicht in der bekannten Ventilliste. Trotzdem speichern?`)) return;
+  }
+  valvePositions[trimmed] = { x: Math.round(xPct*100)/100, y: Math.round(yPct*100)/100 };
+  saveValvePositions();
+  updateCalibCount();
+  renderSchemaDots();
+  toast(`✓ ${trimmed} markiert`);
+}
+function renderSchemaDots() {
+  const wrap = document.getElementById('schemaDots');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const nrInput = document.getElementById('schemaStepInput');
+  const stepNr = nrInput ? parseInt(nrInput.value) : NaN;
+  const d = !isNaN(stepNr) ? STEP_DB[String(stepNr)] : null;
+  const openMap = {};
+  if (d) d.o.forEach(([n,c]) => openMap[n] = c);
+  Object.entries(valvePositions).forEach(([name, pos]) => {
+    const isOpen = !!openMap[name];
+    const dot = document.createElement('div');
+    dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${isOpen ? 'var(--green)' : 'rgba(150,150,150,.55)'};${isOpen ? 'box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6);' : ''}`;
+    dot.title = `${name}${isOpen ? ': ' + openMap[name] : ' (zu)'}`;
+    dot.onclick = (e) => { e.stopPropagation(); if(!calibMode) toast(`${name}${isOpen ? ': offen ('+openMap[name]+')' : ': geschlossen'}`); };
+    wrap.appendChild(dot);
+  });
+}
+
 function saveState() {
   try { localStorage.setItem('fsp54260', JSON.stringify({ss:stepStates, log:logEntries, pst:progStartTimes})); } catch(e){}
   pushStateToCloud();
@@ -1807,6 +1873,7 @@ function switchTab(tab) {
   if (tab==='uebergabe') renderUebergabe();
   if (tab==='stats') renderStats();
   if (tab==='handbuch') renderHandbuchCategories();
+  if (tab==='schema') { updateCalibCount(); renderSchemaDots(); }
 }
 function cap(s) { return s.charAt(0).toUpperCase()+s.slice(1); }
 
@@ -2190,6 +2257,7 @@ function clearSchemaStep() {
   document.getElementById('schemaStepInput').value = '';
   document.getElementById('schemaStepPanel').style.display = 'none';
   document.getElementById('schemaStepPanel').innerHTML = '';
+  renderSchemaDots();
 }
 
 function buildValveGrid(stepNr) {
@@ -2302,6 +2370,7 @@ function onSchemaStepInput(val) {
   } else {
     panel.innerHTML = `<div class="suche-not-found">Schritt ${trimmed} nicht gefunden</div>`;
   }
+  renderSchemaDots();
 }
 
 // ═══════════════════════════════════════════════════════════
