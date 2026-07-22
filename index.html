@@ -722,6 +722,7 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
 .valve-grid{display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;background:var(--b3);}
 .valve-chip{font-family:var(--mono);font-size:9px;padding:3px 5px;border-radius:4px;background:var(--b2);border:1px solid var(--b1);color:var(--t3);text-align:center;min-width:38px;transition:all .15s;}
 .valve-chip.vopen{background:rgba(0,220,120,.22);border-color:var(--green);color:var(--green);font-weight:700;box-shadow:0 0 6px rgba(0,220,120,.3);}
+@keyframes calibPulse { 0%,100% { box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6); } 50% { box-shadow:0 0 14px var(--green),0 0 4px rgba(0,0,0,.6); } }
 </style>
 </head>
 <body>
@@ -865,11 +866,17 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
           oninput="onSchemaStepInput(this.value)">
         <button class="btn-suche-clear" onclick="clearSchemaStep()">✕</button>
       </div>
-      <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
-        <button id="calibBtn" onclick="toggleCalibMode()" style="flex:1;padding:6px 10px;background:var(--b2);border:1px solid var(--b1);border-radius:6px;color:var(--text);font-size:11px;font-family:var(--mono);">📍 Ventil-Position markieren</button>
-        <span id="calibCount" style="font-size:10px;color:var(--t3);font-family:var(--mono);white-space:nowrap;"></span>
+      <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+        <button id="calibBtn" onclick="toggleCalibMode()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--b1);border-radius:20px;color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);transition:all .2s;">
+          <span style="font-size:14px;">📍</span>Ventile markieren
+        </button>
+        <button onclick="openCalibManager()" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;color:var(--t2);font-size:12px;font-weight:600;font-family:var(--sans);white-space:nowrap;">
+          <span style="font-size:13px;">⚙️</span><span id="calibCount">0/152</span>
+        </button>
       </div>
-      <div id="calibHint" style="display:none;font-size:10px;color:var(--yellow);padding-top:4px;">Modus aktiv: Tippe im Bild auf ein Ventil-Symbol, dann Namen eingeben. Nochmal Button tippen zum Beenden.</div>
+      <div id="calibHint" style="display:none;margin-top:8px;padding:8px 10px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;font-size:11px;color:var(--accent);line-height:1.5;">
+        📍 <b>Markier-Modus aktiv</b> — tippe im Bild auf ein Ventil-Symbol. Tippst du auf einen <b>vorhandenen</b> Punkt, kannst du ihn bearbeiten oder löschen.
+      </div>
     </div>
     <div id="schemaStepPanel" style="display:none; max-height:46vh; overflow-y:auto; border-bottom:1px solid var(--b1); flex-shrink:0;"></div>
     <div class="schema-viewport" id="schemaViewport" onclick="onSchemaImageClick(event)">
@@ -879,6 +886,34 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
       </div>
     </div>
     <div class="schema-hint">Zum Zoomen pinchen / mit zwei Fingern scrollen</div>
+  </div>
+
+  <!-- SHEET: Ventil benennen/bearbeiten (ersetzt hässlichen prompt()) -->
+  <div id="calibNameSheet" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.6);align-items:flex-end;" onclick="if(event.target===this)closeCalibNameSheet()">
+    <div style="width:100%;background:var(--s1);border-radius:18px 18px 0 0;padding:18px 18px calc(18px + var(--safe-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.4);">
+      <div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 14px;"></div>
+      <div id="calibSheetTitle" style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">📍 Ventil benennen</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:12px;">Gib die genaue Bezeichnung ein, z.B. V3.5</div>
+      <input id="calibNameInput" type="text" autocapitalize="characters" autocomplete="off" placeholder="z.B. V3.5" style="width:100%;background:var(--s3);border:1px solid var(--b1);border-radius:10px;color:var(--text);font-size:16px;font-family:var(--mono);padding:12px 14px;outline:none;">
+      <div id="calibSuggestions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-height:120px;overflow-y:auto;"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button id="calibDeleteBtn" onclick="calibDeleteCurrent()" style="display:none;padding:12px 16px;background:rgba(255,68,68,.12);border:1px solid var(--red);border-radius:10px;color:var(--red);font-size:13px;font-weight:700;">🗑 Löschen</button>
+        <button onclick="closeCalibNameSheet()" style="flex:1;padding:12px 16px;background:var(--s3);border:1px solid var(--b1);border-radius:10px;color:var(--t2);font-size:13px;font-weight:600;">Abbrechen</button>
+        <button onclick="calibSaveCurrent()" style="flex:1;padding:12px 16px;background:var(--accent);border:none;border-radius:10px;color:#04222c;font-size:13px;font-weight:700;">✓ Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET: Kalibrierung verwalten (alle markierten Ventile, einzeln löschbar) -->
+  <div id="calibManagerSheet" style="display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.6);align-items:flex-end;" onclick="if(event.target===this)closeCalibManager()">
+    <div style="width:100%;max-height:75vh;display:flex;flex-direction:column;background:var(--s1);border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.4);">
+      <div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:14px auto 10px;flex-shrink:0;"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 18px 12px;flex-shrink:0;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);">📍 Markierte Ventile</div>
+        <button onclick="closeCalibManager()" style="background:var(--s3);border:none;border-radius:50%;width:30px;height:30px;color:var(--t2);font-size:14px;">✕</button>
+      </div>
+      <div id="calibManagerList" style="overflow-y:auto;padding:0 18px calc(18px + var(--safe-bottom));"></div>
+    </div>
   </div>
 
   <!-- PAGE: Vergleich (embedded in Suche tab, toggle) -->
@@ -1773,15 +1808,20 @@ function saveValvePositions() {
 }
 function toggleCalibMode() {
   calibMode = !calibMode;
-  document.getElementById('calibBtn').style.background = calibMode ? 'var(--accent)' : 'var(--b2)';
-  document.getElementById('calibBtn').style.color = calibMode ? '#04222c' : 'var(--text)';
+  const btn = document.getElementById('calibBtn');
+  btn.style.background = calibMode ? 'var(--accent)' : 'linear-gradient(135deg,var(--s2),var(--s3))';
+  btn.style.color = calibMode ? '#04222c' : 'var(--text)';
+  btn.style.borderColor = calibMode ? 'var(--accent)' : 'var(--b1)';
   document.getElementById('calibHint').style.display = calibMode ? 'block' : 'none';
   updateCalibCount();
 }
 function updateCalibCount() {
   const el = document.getElementById('calibCount');
-  if (el) el.textContent = `${Object.keys(valvePositions).length} / ${SYS_VALVES.length} markiert`;
+  if (el) el.textContent = `${Object.keys(valvePositions).length}/${SYS_VALVES.length}`;
 }
+
+let _calibPending = null; // {name?, x, y} — aktuell im Sheet bearbeiteter Punkt
+
 function onSchemaImageClick(evt) {
   if (!calibMode) return;
   const img = document.getElementById('schemaImg');
@@ -1789,18 +1829,91 @@ function onSchemaImageClick(evt) {
   const xPct = ((evt.clientX - rect.left) / rect.width) * 100;
   const yPct = ((evt.clientY - rect.top) / rect.height) * 100;
   if (xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
-  const name = prompt('Welches Ventil ist das? (genaue Bezeichnung, z.B. V3.5)');
-  if (!name) return;
-  const trimmed = name.trim();
-  if (!SYS_VALVES.includes(trimmed)) {
-    if (!confirm(`"${trimmed}" ist nicht in der bekannten Ventilliste. Trotzdem speichern?`)) return;
+  openCalibNameSheet(null, xPct, yPct);
+}
+function openCalibNameSheet(existingName, x, y) {
+  _calibPending = { name: existingName, x, y };
+  const sheet = document.getElementById('calibNameSheet');
+  const input = document.getElementById('calibNameInput');
+  const title = document.getElementById('calibSheetTitle');
+  const delBtn = document.getElementById('calibDeleteBtn');
+  if (existingName) {
+    title.textContent = `📍 ${existingName} bearbeiten`;
+    input.value = existingName;
+    delBtn.style.display = 'block';
+  } else {
+    title.textContent = '📍 Ventil benennen';
+    input.value = '';
+    delBtn.style.display = 'none';
   }
-  valvePositions[trimmed] = { x: Math.round(xPct*100)/100, y: Math.round(yPct*100)/100 };
+  renderCalibSuggestions('');
+  sheet.style.display = 'flex';
+  setTimeout(() => input.focus(), 100);
+  input.oninput = () => renderCalibSuggestions(input.value);
+}
+function renderCalibSuggestions(query) {
+  const box = document.getElementById('calibSuggestions');
+  const q = query.trim().toUpperCase();
+  const matches = (q ? SYS_VALVES.filter(v => v.toUpperCase().includes(q)) : SYS_VALVES.filter(v => !valvePositions[v])).slice(0, 12);
+  box.innerHTML = matches.map(v => `<button onclick="document.getElementById('calibNameInput').value='${v}';renderCalibSuggestions('${v}')" style="padding:5px 10px;background:${valvePositions[v] ? 'var(--green-dim)' : 'var(--s3)'};border:1px solid var(--b1);border-radius:14px;color:${valvePositions[v] ? 'var(--green)' : 'var(--t2)'};font-size:11px;font-family:var(--mono);">${v}${valvePositions[v] ? ' ✓' : ''}</button>`).join('');
+}
+function closeCalibNameSheet() {
+  document.getElementById('calibNameSheet').style.display = 'none';
+  _calibPending = null;
+}
+function calibSaveCurrent() {
+  if (!_calibPending) return;
+  const newName = document.getElementById('calibNameInput').value.trim();
+  if (!newName) { toast('Bitte Namen eingeben'); return; }
+  if (!SYS_VALVES.includes(newName) && !confirm(`"${newName}" ist nicht in der bekannten Ventilliste. Trotzdem speichern?`)) return;
+  // Falls umbenannt: alten Eintrag entfernen
+  if (_calibPending.name && _calibPending.name !== newName) delete valvePositions[_calibPending.name];
+  valvePositions[newName] = { x: Math.round(_calibPending.x*100)/100, y: Math.round(_calibPending.y*100)/100 };
   saveValvePositions();
   updateCalibCount();
   renderSchemaDots();
-  toast(`✓ ${trimmed} markiert`);
+  toast(`✓ ${newName} gespeichert`);
+  closeCalibNameSheet();
 }
+function calibDeleteCurrent() {
+  if (!_calibPending || !_calibPending.name) return;
+  if (!confirm(`Markierung für ${_calibPending.name} wirklich löschen?`)) return;
+  delete valvePositions[_calibPending.name];
+  saveValvePositions();
+  updateCalibCount();
+  renderSchemaDots();
+  toast(`🗑 ${_calibPending.name} gelöscht`);
+  closeCalibNameSheet();
+}
+function openCalibManager() {
+  const list = document.getElementById('calibManagerList');
+  const names = Object.keys(valvePositions).sort();
+  if (!names.length) {
+    list.innerHTML = `<div style="text-align:center;padding:30px 10px;color:var(--t3);font-size:12px;">Noch keine Ventile markiert.<br>Tippe auf "📍 Ventile markieren" und dann im Bild auf eine Position.</div>`;
+  } else {
+    list.innerHTML = names.map(n => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--b1);">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--accent);flex-shrink:0;"></div>
+        <div style="flex:1;font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600;">${n}</div>
+        <button onclick="closeCalibManager();openCalibNameSheet('${n}', valvePositions['${n}'].x, valvePositions['${n}'].y)" style="padding:6px 12px;background:var(--s3);border:1px solid var(--b1);border-radius:8px;color:var(--t2);font-size:11px;">Bearbeiten</button>
+        <button onclick="calibManagerDelete('${n}')" style="padding:6px 10px;background:rgba(255,68,68,.12);border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:11px;">🗑</button>
+      </div>`).join('');
+  }
+  document.getElementById('calibManagerSheet').style.display = 'flex';
+}
+function calibManagerDelete(name) {
+  if (!confirm(`Markierung für ${name} wirklich löschen?`)) return;
+  delete valvePositions[name];
+  saveValvePositions();
+  updateCalibCount();
+  renderSchemaDots();
+  openCalibManager(); // refresh list
+  toast(`🗑 ${name} gelöscht`);
+}
+function closeCalibManager() {
+  document.getElementById('calibManagerSheet').style.display = 'none';
+}
+
 function renderSchemaDots() {
   const wrap = document.getElementById('schemaDots');
   if (!wrap) return;
@@ -1813,12 +1926,17 @@ function renderSchemaDots() {
   Object.entries(valvePositions).forEach(([name, pos]) => {
     const isOpen = !!openMap[name];
     const dot = document.createElement('div');
-    dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${isOpen ? 'var(--green)' : 'rgba(150,150,150,.55)'};${isOpen ? 'box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6);' : ''}`;
+    dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${isOpen ? 'radial-gradient(circle at 35% 35%,#5fff9e,var(--green))' : 'rgba(150,150,150,.55)'};${isOpen ? 'box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6);animation:calibPulse 2s ease-in-out infinite;' : ''}`;
     dot.title = `${name}${isOpen ? ': ' + openMap[name] : ' (zu)'}`;
-    dot.onclick = (e) => { e.stopPropagation(); if(!calibMode) toast(`${name}${isOpen ? ': offen ('+openMap[name]+')' : ': geschlossen'}`); };
+    dot.onclick = (e) => {
+      e.stopPropagation();
+      if (calibMode) { openCalibNameSheet(name, pos.x, pos.y); }
+      else { toast(`${name}${isOpen ? ': offen ('+openMap[name]+')' : ': geschlossen'}`); }
+    };
     wrap.appendChild(dot);
   });
 }
+
 
 function saveState() {
   try { localStorage.setItem('fsp54260', JSON.stringify({ss:stepStates, log:logEntries, pst:progStartTimes})); } catch(e){}
