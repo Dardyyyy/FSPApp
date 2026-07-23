@@ -1330,35 +1330,28 @@ function getStateInfo(val) {
 // ═══════════════════════════════════════════════════════════
 // VALVE RENDERING — with closed valve support
 // ═══════════════════════════════════════════════════════════
+function groupStyle(grp) {
+  const g = (grp || '').toLowerCase();
+  if (g.includes('sicherheit')) return {icon:'🛡️', color:'#ff5566'};
+  if (g.includes('medien')) return {icon:'💧', color:'#00c8f0'};
+  if (g.includes('füllstation')) return {icon:'💉', color:'#00e676'};
+  if (g.includes('nachbegasen')) return {icon:'💨', color:'#a78bfa'};
+  if (g.includes('produktfilter')) return {icon:'🧪', color:'#ffab40'};
+  if (g.includes('sterilfilter') || g.includes('begasung')) return {icon:'🫧', color:'#40c4ff'};
+  if (g.includes('wärmetauscher') || g.includes('medieneinheit')) return {icon:'🌡️', color:'#ff7043'};
+  if (g.includes('ablauf')) return {icon:'⬇️', color:'#78909c'};
+  if (g.includes('nadel') || g.includes('dampfkühlung')) return {icon:'🎯', color:'#ec407a'};
+  if (g.includes('stellenvereinzelung')) return {icon:'🔀', color:'#66bb6a'};
+  if (g.includes('schließbegasen')) return {icon:'🔒', color:'#ba68c8'};
+  return {icon:'⚙️', color:'#8899aa'};
+}
+
 function buildValveHTML(stepNr, showClosed = false) {
   const d = STEP_DB[String(stepNr)];
   if (!d) return '<div style="font-family:var(--mono);font-size:11px;color:var(--t3);padding:20px 0;text-align:center;">Kein VSP-Eintrag</div>';
 
   const {fw, o: openValves} = d;
   let html = '';
-
-  // ═══ "WAS PASSIERT HIER" — automatische Kurzzusammenfassung ═══
-  {
-    const nOpen = openValves.length;
-    const grpCounts = {};
-    openValves.forEach(([name]) => {
-      const g = (VALVE_INFO[name] || {}).g || 'Weitere';
-      grpCounts[g] = (grpCounts[g] || 0) + 1;
-    });
-    const topGroups = Object.entries(grpCounts).sort((a,b) => b[1]-a[1]).slice(0,3).map(([g]) => g);
-    const nTakt = openValves.filter(([,v]) => v !== 'X').length;
-    const zeit = fw['Schrittzeit'];
-    let summary = `<b>${d.n}</b>. `;
-    summary += nOpen ? `${nOpen} Ventil${nOpen===1?'':'e'} sind aktiv` : 'Keine Ventile sind in diesem Schritt aktiv';
-    if (topGroups.length) summary += ` — vor allem im Bereich ${topGroups.join(', ')}`;
-    summary += '.';
-    if (nTakt) summary += ` Davon ${nTakt} getaktet/bedingt gesteuert (nicht dauerhaft offen).`;
-    if (zeit) summary += ` Dauer: <b style="color:var(--accent)">${zeit}</b>.`;
-    html += `<div style="margin-bottom:10px;padding:12px 14px;background:linear-gradient(135deg,var(--s2),var(--s3));border:1px solid var(--b1);border-radius:12px;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:9px;color:var(--t2);font-weight:700;letter-spacing:.5px;margin-bottom:6px;">💡 WAS PASSIERT HIER</div>
-      <div style="font-size:13px;color:var(--text);line-height:1.55;">${summary}</div>
-    </div>`;
-  }
 
   // Weiterschaltbedingung im Klartext (aus Excel-Spalten "Kommentar", "Max Druck", "Signalaustausch")
   if (d.km || d.kmp || d.kms) {
@@ -1439,14 +1432,25 @@ function buildValveHTML(stepNr, showClosed = false) {
       groups[grp].push({name, val, desc: info.d || ''});
     });
 
-    html += `<div class="info-section">
-      <div class="info-section-hdr"><span>🟢 Geöffnete Ventile</span><span class="info-cnt">${openValves.length}</span></div>`;
+    html += `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px;background:linear-gradient(135deg,rgba(0,230,118,.14),rgba(0,230,118,.03));border:1px solid rgba(0,230,118,.3);border-radius:14px;">
+      <div style="width:40px;height:40px;border-radius:11px;background:rgba(0,230,118,.18);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;">🟢</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:var(--green);">Geöffnete Ventile</div>
+        <div style="font-size:10px;color:var(--t3);margin-top:1px;">${Object.keys(groups).length} Gruppe${Object.keys(groups).length===1?'':'n'}</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green);">${openValves.length}</div>
+    </div>`;
     Object.entries(groups).forEach(([grp, items]) => {
+      const gs = groupStyle(grp);
       html += `<div class="valve-group">
-        <div class="valve-group-title"><span>${grp}</span><span>${items.length}</span></div>`;
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 4px 8px;">
+          <span style="font-size:13px;">${gs.icon}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:${gs.color};font-weight:700;text-transform:uppercase;letter-spacing:.08em;flex:1;">${grp}</span>
+          <span style="background:${gs.color}22;color:${gs.color};font-size:9px;font-weight:700;padding:2px 8px;border-radius:8px;">${items.length}</span>
+        </div>`;
       items.forEach(({name, val, desc}) => {
         const si = getStateInfo(val);
-        html += `<div class="valve-item state-${si.cat}">
+        html += `<div class="valve-item state-${si.cat}" style="border-left-color:${gs.color};">
           <div class="valve-item-left">
             <div class="valve-name">${name}</div>
             ${desc ? `<div class="valve-desc">${desc}</div>` : ''}
@@ -1456,7 +1460,6 @@ function buildValveHTML(stepNr, showClosed = false) {
       });
       html += `</div>`;
     });
-    html += `</div>`;
 
     // Takt legend — mit Klartext-Erklärung wie bei AFL
     const nonX = [...new Set(openValves.map(([n,v]) => v).filter(v => v !== 'X'))];
