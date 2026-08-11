@@ -1020,6 +1020,13 @@ const SYS_VALVES = VSP.vl;   // sorted list of all 152 valve names
 const VALVE_INFO = VSP.vi;   // name -> {d: desc, g: group}
 const STEP_DB = VSP.s;       // step_nr -> {n, b, o:[[name,code],...], fw}
 
+// Alle Sensor-/Weiterschaltbedingungs-Labels (PR, PT, TE, QE...) aus allen Schritten,
+// damit sie wie Ventile im Schema markiert und gesucht werden können.
+const SENSOR_LABELS = [...new Set(
+  Object.values(STEP_DB).flatMap(d => Object.keys(d.fw || {}).filter(k => k !== 'Schrittzeit'))
+)].sort();
+const ALL_MARKABLE = [...SYS_VALVES, ...SENSOR_LABELS]; // Ventile + Sensoren, alles was im Schema markierbar ist
+
 // Derive closed valves for a step (complement of open within system)
 const ALARM_DB = [
   {g:"Filter-Alarme (Differenzdruck)", codes:["4PdT1-5", "5PdT1-3", "8PdT2-4", "9PdT1-8", "10PdT1", "11PdT1-2"], namen:"F01-F23 Zu-/Ab-/Umluftfilter, LAF-Filter, Staubsauger, Luftvorhang — oberer Alarmwert Differenzdruck", b:"Alarm löst aus, sobald der Differenzdruck über einen Filter den oberen Grenzwert erreicht.", gr:["Betriebsbedingte Verschmutzung des Filters", "Eingestellte Grenzwerte nicht korrekt", "Druckmessumformer defekt", "Messschlauch geklemmt oder unterbrochen"], be:["Druckmessumformer prüfen", "Einstellung der Alarmgrenzwerte prüfen", "Filter austauschen"]},
@@ -1826,7 +1833,10 @@ function toggleCalibMode() {
 }
 function updateCalibCount() {
   const el = document.getElementById('calibCount');
-  if (el) el.textContent = `${Object.keys(valvePositions).length}/${SYS_VALVES.length}`;
+  if (!el) return;
+  const markedValves = SYS_VALVES.filter(v => valvePositions[v]).length;
+  const markedSensors = SENSOR_LABELS.filter(s => valvePositions[s]).length;
+  el.textContent = `${markedValves}/${SYS_VALVES.length} Ventile · ${markedSensors}/${SENSOR_LABELS.length} Sensoren`;
 }
 
 let _calibPending = null; // {name?, x, y} — aktuell im Sheet bearbeiteter Punkt
@@ -1851,7 +1861,7 @@ function openCalibNameSheet(existingName, x, y) {
     input.value = existingName;
     delBtn.style.display = 'block';
   } else {
-    title.textContent = '📍 Ventil benennen';
+    title.textContent = '📍 Ventil / Sensor benennen';
     input.value = '';
     delBtn.style.display = 'none';
   }
@@ -1863,8 +1873,15 @@ function openCalibNameSheet(existingName, x, y) {
 function renderCalibSuggestions(query) {
   const box = document.getElementById('calibSuggestions');
   const q = query.trim().toUpperCase();
-  const matches = (q ? SYS_VALVES.filter(v => v.toUpperCase().includes(q)) : SYS_VALVES.filter(v => !valvePositions[v])).slice(0, 12);
-  box.innerHTML = matches.map(v => `<button onclick="document.getElementById('calibNameInput').value='${v}';renderCalibSuggestions('${v}')" style="padding:5px 10px;background:${valvePositions[v] ? 'var(--green-dim)' : 'var(--s3)'};border:1px solid var(--b1);border-radius:14px;color:${valvePositions[v] ? 'var(--green)' : 'var(--t2)'};font-size:11px;font-family:var(--mono);">${v}${valvePositions[v] ? ' ✓' : ''}</button>`).join('');
+  const matches = (q ? ALL_MARKABLE.filter(v => v.toUpperCase().includes(q)) : ALL_MARKABLE.filter(v => !valvePositions[v])).slice(0, 20);
+  box.innerHTML = matches.map(v => {
+    const isSensor = SENSOR_LABELS.includes(v);
+    const marked = !!valvePositions[v];
+    const bg = marked ? (isSensor ? 'rgba(64,196,255,.18)' : 'var(--green-dim)') : 'var(--s3)';
+    const fg = marked ? (isSensor ? '#40c4ff' : 'var(--green)') : 'var(--t2)';
+    const icon = isSensor ? '📊 ' : '';
+    return `<button onclick="document.getElementById('calibNameInput').value='${v}';renderCalibSuggestions('${v}')" style="padding:5px 10px;background:${bg};border:1px solid var(--b1);border-radius:14px;color:${fg};font-size:11px;font-family:var(--mono);">${icon}${v}${marked ? ' ✓' : ''}</button>`;
+  }).join('');
 }
 function closeCalibNameSheet() {
   document.getElementById('calibNameSheet').style.display = 'none';
@@ -1874,7 +1891,7 @@ function calibSaveCurrent() {
   if (!_calibPending) return;
   const newName = document.getElementById('calibNameInput').value.trim();
   if (!newName) { toast('Bitte Namen eingeben'); return; }
-  if (!SYS_VALVES.includes(newName) && !confirm(`"${newName}" ist nicht in der bekannten Ventilliste. Trotzdem speichern?`)) return;
+  if (!ALL_MARKABLE.includes(newName) && !confirm(`"${newName}" ist nicht in der bekannten Ventil-/Sensorliste. Trotzdem speichern?`)) return;
   // Falls umbenannt: alten Eintrag entfernen
   if (_calibPending.name && _calibPending.name !== newName) delete valvePositions[_calibPending.name];
   valvePositions[newName] = { x: Math.round(_calibPending.x*100)/100, y: Math.round(_calibPending.y*100)/100 };
@@ -1900,13 +1917,16 @@ function openCalibManager() {
   if (!names.length) {
     list.innerHTML = `<div style="text-align:center;padding:30px 10px;color:var(--t3);font-size:12px;">Noch keine Ventile markiert.<br>Tippe auf "📍 Ventile markieren" und dann im Bild auf eine Position.</div>`;
   } else {
-    list.innerHTML = names.map(n => `
+    list.innerHTML = names.map(n => {
+      const isSensor = SENSOR_LABELS.includes(n);
+      return `
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--b1);">
-        <div style="width:10px;height:10px;border-radius:50%;background:var(--accent);flex-shrink:0;"></div>
-        <div style="flex:1;font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600;">${n}</div>
+        <div style="width:10px;height:10px;border-radius:${isSensor ? '3px' : '50%'};background:${isSensor ? '#40c4ff' : 'var(--accent)'};flex-shrink:0;"></div>
+        <div style="flex:1;font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600;">${isSensor ? '📊 ' : ''}${n}</div>
         <button onclick="closeCalibManager();openCalibNameSheet('${n}', valvePositions['${n}'].x, valvePositions['${n}'].y)" style="padding:6px 12px;background:var(--s3);border:1px solid var(--b1);border-radius:8px;color:var(--t2);font-size:11px;">Bearbeiten</button>
         <button onclick="calibManagerDelete('${n}')" style="padding:6px 10px;background:rgba(255,68,68,.12);border:1px solid var(--red);border-radius:8px;color:var(--red);font-size:11px;">🗑</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
   document.getElementById('calibManagerSheet').style.display = 'flex';
 }
@@ -1933,14 +1953,35 @@ function renderSchemaDots() {
   const openMap = {};
   if (d) d.o.forEach(([n,c]) => openMap[n] = c);
   Object.entries(valvePositions).forEach(([name, pos]) => {
-    const isOpen = !!openMap[name];
+    const isSensor = SENSOR_LABELS.includes(name);
     const dot = document.createElement('div');
-    dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${isOpen ? 'radial-gradient(circle at 35% 35%,#5fff9e,var(--green))' : 'rgba(150,150,150,.55)'};${isOpen ? 'box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6);animation:calibPulse 2s ease-in-out infinite;' : ''}`;
-    dot.title = `${name}${isOpen ? ': ' + openMap[name] : ' (zu)'}`;
+    let bg, title, extraStyle = '';
+    if (isSensor) {
+      const val = d && d.fw ? d.fw[name] : undefined;
+      const active = val !== undefined;
+      bg = active ? 'radial-gradient(circle at 35% 35%,#8fe3ff,#40c4ff)' : 'rgba(150,150,150,.4)';
+      if (active) extraStyle = 'box-shadow:0 0 8px #40c4ff,0 0 4px rgba(0,0,0,.6);animation:calibPulse 2s ease-in-out infinite;';
+      title = `${name}${active ? ': ' + val : ' (in diesem Schritt nicht aktiv)'}`;
+      dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:4px;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${bg};${extraStyle}`;
+    } else {
+      const isOpen = !!openMap[name];
+      bg = isOpen ? 'radial-gradient(circle at 35% 35%,#5fff9e,var(--green))' : 'rgba(150,150,150,.55)';
+      if (isOpen) extraStyle = 'box-shadow:0 0 8px var(--green),0 0 4px rgba(0,0,0,.6);animation:calibPulse 2s ease-in-out infinite;';
+      title = `${name}${isOpen ? ': ' + openMap[name] : ' (zu)'}`;
+      dot.style.cssText = `position:absolute;left:${pos.x}%;top:${pos.y}%;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;pointer-events:auto;cursor:pointer;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);background:${bg};${extraStyle}`;
+    }
+    dot.title = title;
     dot.onclick = (e) => {
       e.stopPropagation();
       if (calibMode) { openCalibNameSheet(name, pos.x, pos.y); }
-      else { toast(`${name}${isOpen ? ': offen ('+openMap[name]+')' : ': geschlossen'}`); }
+      else {
+        if (isSensor) {
+          const val = d && d.fw ? d.fw[name] : undefined;
+          toast(`${name}${val !== undefined ? ': ' + val : ': nicht aktiv in diesem Schritt'}`);
+        } else {
+          toast(`${name}${openMap[name] ? ': offen ('+openMap[name]+')' : ': geschlossen'}`);
+        }
+      }
     };
     wrap.appendChild(dot);
   });
