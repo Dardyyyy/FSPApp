@@ -908,10 +908,27 @@ html, body { height:100%; overflow:hidden; background:var(--bg); color:var(--tex
     <div style="width:100%;max-height:75vh;display:flex;flex-direction:column;background:var(--s1);border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.4);">
       <div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:14px auto 10px;flex-shrink:0;"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:0 18px 12px;flex-shrink:0;">
-        <div style="font-size:15px;font-weight:700;color:var(--text);">📍 Markierte Ventile</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);">📍 Markierte Ventile & Sensoren</div>
         <button onclick="closeCalibManager()" style="background:var(--s3);border:none;border-radius:50%;width:30px;height:30px;color:var(--t2);font-size:14px;">✕</button>
       </div>
+      <div style="padding:0 18px 12px;flex-shrink:0;">
+        <button onclick="showPositionsCodeExport()" style="width:100%;padding:9px 12px;background:rgba(0,180,255,.1);border:1px solid rgba(0,180,255,.3);border-radius:8px;color:var(--accent);font-size:11px;font-weight:700;">💾 Als Code exportieren (dauerhaft im Repo speichern)</button>
+        <div style="font-size:9px;color:var(--t3);margin-top:5px;line-height:1.4;">Wichtig: Markierungen liegen nur lokal im Browser. Bei neuem Gerät, gelöschtem Cache oder neuer Vercel-Preview-URL sind sie sonst weg. Mit "Als Code exportieren" bekommst du einen Code-Block zum Einfügen in die index.html — dann sind die Markierungen fest im Deployment und gehen nie mehr verloren.</div>
+      </div>
       <div id="calibManagerList" style="overflow-y:auto;padding:0 18px calc(18px + var(--safe-bottom));"></div>
+    </div>
+  </div>
+  <!-- SHEET: Positionen als Code exportieren -->
+  <div id="posCodeSheet" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.8);align-items:flex-end;" onclick="if(event.target===this)document.getElementById('posCodeSheet').style.display='none'">
+    <div style="background:var(--s1);border:1px solid var(--b1);border-top:2px solid var(--accent);border-radius:16px 16px 0 0;width:100%;padding:20px 18px calc(30px + var(--safe-bottom));max-height:80vh;display:flex;flex-direction:column;">
+      <div style="width:40px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 16px;flex-shrink:0;"></div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:4px;flex-shrink:0;">💾 Positionen als Code</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--t3);margin-bottom:12px;flex-shrink:0;line-height:1.5;">1. Kopieren · 2. In der index.html den Block <code>const DEFAULT_VALVE_POSITIONS = {...}</code> damit ersetzen · 3. Committen & deployen. Danach sind alle Markierungen fest eingebaut, unabhängig vom Browser-Speicher.</div>
+      <textarea id="posCodeDisplay" readonly style="flex:1;min-height:200px;background:var(--b2);border:1px solid var(--b1);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;"></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;flex-shrink:0;">
+        <button class="detail-btn accent" onclick="copyPositionsCode()">📋 Kopieren</button>
+        <button class="detail-btn cancel-btn" onclick="document.getElementById('posCodeSheet').style.display='none'">Schließen</button>
+      </div>
     </div>
   </div>
 
@@ -1805,6 +1822,13 @@ const DEFAULT_TEAM_NOTES = {
   // lila "Abgeleiteter Hinweis"-Kasten), da er im Kommentar dieses Schritts nicht wörtlich steht.
 };
 
+// Fest im Code hinterlegte Ventil-/Sensor-Positionen im Schema-Bild (x/y in %).
+// Diese überleben jedes Deployment und jeden Browser-Cache-Reset, unabhängig von localStorage.
+// Über "📍 Ventile markieren" → "💾 Als Code exportieren" kannst du deinen aktuellen
+// Kalibrierstand hierher kopieren, damit er dauerhaft im Repo bleibt.
+const DEFAULT_VALVE_POSITIONS = {
+};
+
 function loadState() {
   try {
     const s = localStorage.getItem('fsp54260');
@@ -1816,8 +1840,10 @@ function loadState() {
   } catch(e){}
   try {
     const vp = localStorage.getItem('fsp54260_valvepos');
-    if (vp) valvePositions = JSON.parse(vp);
-  } catch(e){}
+    const local = vp ? JSON.parse(vp) : {};
+    // Fest im Code hinterlegte Positionen zuerst, lokale Kalibrierung überschreibt/ergänzt sie
+    valvePositions = Object.assign({}, DEFAULT_VALVE_POSITIONS, local);
+  } catch(e){ valvePositions = Object.assign({}, DEFAULT_VALVE_POSITIONS); }
 }
 function saveValvePositions() {
   try { localStorage.setItem('fsp54260_valvepos', JSON.stringify(valvePositions)); } catch(e){}
@@ -1938,6 +1964,32 @@ function calibManagerDelete(name) {
   renderSchemaDots();
   openCalibManager(); // refresh list
   toast(`🗑 ${name} gelöscht`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// POSITIONEN ALS CODE EXPORTIEREN — damit Kalibrierung fest im
+// Repo landet und nicht nur im (fragilen) localStorage lebt
+// ═══════════════════════════════════════════════════════════
+function showPositionsCodeExport() {
+  const entries = Object.entries(valvePositions).sort(([a],[b]) => a.localeCompare(b));
+  if (!entries.length) { toast('Noch nichts markiert'); return; }
+  const lines = entries.map(([name, pos]) => `  ${JSON.stringify(name)}: { x: ${pos.x}, y: ${pos.y} },`);
+  const code = `const DEFAULT_VALVE_POSITIONS = {\n${lines.join('\n')}\n};`;
+  document.getElementById('posCodeDisplay').value = code;
+  document.getElementById('posCodeSheet').style.display = 'flex';
+}
+function copyPositionsCode() {
+  const ta = document.getElementById('posCodeDisplay');
+  ta.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(() => toast('✓ Code kopiert — jetzt in die index.html einfügen')).catch(() => {
+      document.execCommand('copy');
+      toast('✓ Code kopiert — jetzt in die index.html einfügen');
+    });
+  } else {
+    document.execCommand('copy');
+    toast('✓ Code kopiert — jetzt in die index.html einfügen');
+  }
 }
 function closeCalibManager() {
   document.getElementById('calibManagerSheet').style.display = 'none';
